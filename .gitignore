@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 firebase_key.json
 uploads/
+alembic_temp/
