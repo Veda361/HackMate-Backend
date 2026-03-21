@@ -3,18 +3,23 @@ import os
 import json
 import firebase_admin
 from firebase_admin import credentials, auth
+from fastapi import HTTPException
 
-# Load environment variables
+# 🔥 Load environment variables
 load_dotenv()
+
 
 def init_firebase():
     firebase_json = os.getenv("FIREBASE_CREDENTIALS")
 
+    print("🔥 Initializing Firebase...")
+
     if not firebase_json:
-        raise ValueError("❌ FIREBASE_CREDENTIALS not set in environment")
+        print("❌ FIREBASE_CREDENTIALS NOT FOUND")
+        raise ValueError("FIREBASE_CREDENTIALS not set")
 
     try:
-        # Handle case where quotes are accidentally added twice
+        # Remove extra quotes if present
         if firebase_json.startswith("'") or firebase_json.startswith('"'):
             firebase_json = firebase_json.strip("'\"")
 
@@ -24,28 +29,52 @@ def init_firebase():
         if "private_key" in cred_dict:
             cred_dict["private_key"] = cred_dict["private_key"].replace("\\n", "\n")
 
-        # Initialize only once
+        # Initialize Firebase only once
         if not firebase_admin._apps:
             cred = credentials.Certificate(cred_dict)
             firebase_admin.initialize_app(cred)
+            print("✅ Firebase initialized successfully")
 
     except json.JSONDecodeError as e:
-        raise ValueError(f"❌ Invalid FIREBASE_CREDENTIALS JSON: {str(e)}")
+        print("❌ JSON ERROR:", str(e))
+        raise ValueError(f"Invalid FIREBASE_CREDENTIALS JSON: {str(e)}")
 
     except Exception as e:
-        raise ValueError(f"❌ Firebase initialization failed: {str(e)}")
+        print("❌ FIREBASE INIT ERROR:", str(e))
+        raise ValueError(f"Firebase initialization failed: {str(e)}")
 
 
-# Initialize at import
+# 🔥 Initialize Firebase on startup
 init_firebase()
 
 
+# 🔥 VERIFY TOKEN (WITH FULL DEBUG)
 def verify_token(token: str):
     try:
+        print("🔐 Verifying token...")
+
+        if not token:
+            print("❌ No token received")
+            raise HTTPException(status_code=401, detail="No token provided")
+
+        # 🔥 Show partial token (safe debug)
+        print("🪪 TOKEN (first 25 chars):", token[:25])
+
         decoded = auth.verify_id_token(token)
+
+        print("✅ TOKEN VERIFIED")
+        print("👤 UID:", decoded.get("uid"))
+        print("📧 EMAIL:", decoded.get("email"))
+
         return {
             "uid": decoded.get("uid"),
             "email": decoded.get("email"),
         }
+
     except Exception as e:
-        raise ValueError(f"❌ Invalid Firebase token: {str(e)}")
+        print("❌ TOKEN VERIFICATION FAILED:", str(e))
+
+        raise HTTPException(
+            status_code=401,
+            detail=f"Invalid Firebase token: {str(e)}"
+        )
