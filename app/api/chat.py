@@ -6,10 +6,7 @@ from app.core.firebase import verify_token
 
 router = APIRouter()
 
-# 🔥 Active connections
 connections = {}
-
-# 🔥 Online users
 online_users = set()
 
 
@@ -21,13 +18,8 @@ def get_db():
         db.close()
 
 
-# 🔥 Get chat history
 @router.get("/history/{other_uid}")
-def get_chat_history(
-    other_uid: str,
-    authorization: str = Header(...),
-    db: Session = Depends(get_db)
-):
+def get_chat_history(other_uid: str, authorization: str = Header(...), db: Session = Depends(get_db)):
     token = authorization.split(" ")[1]
     decoded = verify_token(token)
     uid = decoded["uid"]
@@ -48,7 +40,6 @@ def get_chat_history(
     ]
 
 
-# 🔥 WebSocket (CHAT + CALL + SIGNALING)
 @router.websocket("/ws/{uid}")
 async def websocket_endpoint(websocket: WebSocket, uid: str):
     await websocket.accept()
@@ -56,80 +47,46 @@ async def websocket_endpoint(websocket: WebSocket, uid: str):
     connections[uid] = websocket
     online_users.add(uid)
 
-    # 🔥 Broadcast online users
+    # broadcast online users
     for conn in connections.values():
-        await conn.send_json({
-            "online": list(online_users)
-        })
+        await conn.send_json({"online": list(online_users)})
 
     try:
         while True:
             data = await websocket.receive_json()
             receiver = data.get("to")
 
-            # =========================
-            # 💬 CHAT MESSAGE (UNCHANGED)
-            # =========================
             if "message" in data:
-                message = data["message"]
-
                 db = SessionLocal()
-                msg = Message(
+                db.add(Message(
                     sender_uid=uid,
                     receiver_uid=receiver,
-                    content=message
-                )
-                db.add(msg)
+                    content=data["message"]
+                ))
                 db.commit()
                 db.close()
 
                 if receiver in connections:
                     await connections[receiver].send_json({
                         "from": uid,
-                        "message": message
+                        "message": data["message"]
                     })
 
-            # =========================
-            # ✍️ TYPING (UNCHANGED)
-            # =========================
-            elif "typing" in data:
-                if receiver in connections:
-                    await connections[receiver].send_json({
-                        "typing": True
-                    })
+            elif "typing" in data and receiver in connections:
+                await connections[receiver].send_json({"typing": True})
 
-            # =========================
-            # 📞 NEW: INCOMING CALL
-            # =========================
-            elif "call" in data:
-                if receiver in connections:
-                    await connections[receiver].send_json({
-                        "call": True,
-                        "from": uid
-                    })
+            elif "call" in data and receiver in connections:
+                await connections[receiver].send_json({"call": True, "from": uid})
 
-            elif "call_accept" in data:
-                if receiver in connections:
-                    await connections[receiver].send_json({
-                        "call_accept": True,
-                        "from": uid
-                    })
+            elif "call_accept" in data and receiver in connections:
+                await connections[receiver].send_json({"call_accept": True, "from": uid})
 
-            elif "call_reject" in data:
-                if receiver in connections:
-                    await connections[receiver].send_json({
-                        "call_reject": True
-                    })
+            elif "call_reject" in data and receiver in connections:
+                await connections[receiver].send_json({"call_reject": True})
 
-            # =========================
-            # 📞 WEBRTC (UNCHANGED)
-            # =========================
-            elif "offer" in data or "answer" in data or "candidate" in data:
+            elif any(k in data for k in ["offer", "answer", "candidate"]):
                 if receiver in connections:
-                    await connections[receiver].send_json({
-                        **data,
-                        "from": uid
-                    })
+                    await connections[receiver].send_json({**data, "from": uid})
 
     except Exception as e:
         print("WebSocket error:", e)
@@ -139,6 +96,4 @@ async def websocket_endpoint(websocket: WebSocket, uid: str):
         online_users.discard(uid)
 
         for conn in connections.values():
-            await conn.send_json({
-                "online": list(online_users)
-            })
+            await conn.send_json({"online": list(online_users)})
