@@ -87,23 +87,26 @@ def update_skills(
     authorization: str = Header(...),
     db: Session = Depends(get_db)
 ):
-    token = authorization.split(" ")[1]
-    decoded = verify_token(token)
+    try:
+        token = authorization.split(" ")[1]
+        decoded = verify_token(token)
 
-    uid = decoded["uid"]
-    skills = data.get("skills")
+        uid = decoded["uid"]
+        skills = data.get("skills")
 
-    print("DEBUG SKILLS:", skills)  # 🔥 DEBUG
+        user = db.query(User).filter(User.firebase_uid == uid).first()
 
-    user = db.query(User).filter(User.firebase_uid == uid).first()
+        if not user:
+            return {"error": "User not found"}
 
-    if not user:
-        return {"error": "User not found"}
+        user.skills = skills
+        db.commit()
 
-    user.skills = skills
-    db.commit()
+        return {"msg": "Skills updated", "skills": skills}
 
-    return {"msg": "Skills updated", "skills": skills}
+    except Exception as e:
+        print("ERROR:", e)
+        return {"error": str(e)}
 
 # 🔥 MATCHING ENGINE
 @router.get("/match")
