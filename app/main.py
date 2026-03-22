@@ -12,8 +12,8 @@ app = FastAPI(title="HackMate API 🚀")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 🔥 TEMP (must)
-    allow_credentials=False,  # 🔥 IMPORTANT FIX
+    allow_origins=["*"],
+    allow_credentials=True,  # ✅ FIX THIS
     allow_methods=["*"],
     allow_headers=["*"],
 )
