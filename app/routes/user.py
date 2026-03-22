@@ -84,15 +84,23 @@ def get_me(
 @router.post("/update-skills")
 def update_skills(
     data: dict = Body(...),
-    authorization: str = Header(...),
+    authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
     try:
+        print("📩 Request received")
+
+        if not authorization:
+            return {"error": "Missing Authorization"}
+
         token = authorization.split(" ")[1]
+
         decoded = verify_token(token)
 
         uid = decoded["uid"]
         skills = data.get("skills")
+
+        print("🧠 Skills:", skills)
 
         user = db.query(User).filter(User.firebase_uid == uid).first()
 
@@ -102,10 +110,12 @@ def update_skills(
         user.skills = skills
         db.commit()
 
+        print("✅ Skills updated")
+
         return {"msg": "Skills updated", "skills": skills}
 
     except Exception as e:
-        print("ERROR:", e)
+        print("❌ ERROR:", e)
         return {"error": str(e)}
 
 # 🔥 MATCHING ENGINE

@@ -54,17 +54,9 @@ def verify_token(token: str):
         print("🔐 Verifying token...")
 
         if not token:
-            print("❌ No token received")
-            raise HTTPException(status_code=401, detail="No token provided")
-
-        # 🔥 Show partial token (safe debug)
-        print("🪪 TOKEN (first 25 chars):", token[:25])
+            raise HTTPException(status_code=401, detail="No token")
 
         decoded = auth.verify_id_token(token)
-
-        print("✅ TOKEN VERIFIED")
-        print("👤 UID:", decoded.get("uid"))
-        print("📧 EMAIL:", decoded.get("email"))
 
         return {
             "uid": decoded.get("uid"),
@@ -72,9 +64,10 @@ def verify_token(token: str):
         }
 
     except Exception as e:
-        print("❌ TOKEN VERIFICATION FAILED:", str(e))
+        print("❌ TOKEN ERROR:", str(e))
 
+        # 🔥 IMPORTANT: ALWAYS RETURN RESPONSE (DON'T HANG)
         raise HTTPException(
             status_code=401,
-            detail=f"Invalid Firebase token: {str(e)}"
+            detail="Invalid token"
         )
