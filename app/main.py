@@ -37,3 +37,7 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 @app.get("/")
 def home():
     return {"msg": "HackMate Running 🚀"}
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
