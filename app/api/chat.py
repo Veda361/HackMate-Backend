@@ -5,20 +5,47 @@ from app.models.message import Message
 
 router = APIRouter()
 
-connections = {}
-online_users = set()
+
+# 🔥 CONNECTION MANAGER (NEW)
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections = {}  # uid -> websocket
+        self.online_users = set()
+
+    async def connect(self, uid: str, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections[uid] = websocket
+        self.online_users.add(uid)
+
+        print(f"🔌 Connected: {uid}")
+
+        # 🔥 broadcast online users
+        await self.broadcast({"online": list(self.online_users)})
+
+    def disconnect(self, uid: str):
+        self.active_connections.pop(uid, None)
+        self.online_users.discard(uid)
+
+        print(f"❌ Disconnected: {uid}")
+
+    async def send_personal_message(self, message: dict, uid: str):
+        ws = self.active_connections.get(uid)
+        if ws:
+            await ws.send_json(message)
+
+    async def broadcast(self, message: dict):
+        for ws in self.active_connections.values():
+            await ws.send_json(message)
 
 
+# 🔥 GLOBAL INSTANCE (IMPORTANT)
+manager = ConnectionManager()
+
+
+# 🔥 WEBSOCKET ROUTE
 @router.websocket("/ws/{uid}")
 async def websocket_endpoint(websocket: WebSocket, uid: str):
-    await websocket.accept()
-
-    connections[uid] = websocket
-    online_users.add(uid)
-
-    # 🔥 broadcast online users
-    for conn in connections.values():
-        await conn.send_json({"online": list(online_users)})
+    await manager.connect(uid, websocket)
 
     try:
         while True:
@@ -27,7 +54,7 @@ async def websocket_endpoint(websocket: WebSocket, uid: str):
 
             # 💬 MESSAGE
             if "message" in data:
-                db = SessionLocal()
+                db: Session = SessionLocal()
 
                 db.add(Message(
                     sender_uid=uid,
@@ -37,52 +64,46 @@ async def websocket_endpoint(websocket: WebSocket, uid: str):
                 db.commit()
                 db.close()
 
-                if receiver in connections:
-                    await connections[receiver].send_json({
-                        "from": uid,
-                        "message": data["message"]
-                    })
+                await manager.send_personal_message({
+                    "from": uid,
+                    "message": data["message"]
+                }, receiver)
 
             # ✍️ TYPING
-            elif "typing" in data and receiver in connections:
-                await connections[receiver].send_json({
+            elif "typing" in data:
+                await manager.send_personal_message({
                     "typing": True,
                     "from": uid
-                })
+                }, receiver)
 
             # 📞 CALL
-            elif "call" in data and receiver in connections:
-                await connections[receiver].send_json({
+            elif "call" in data:
+                await manager.send_personal_message({
                     "call": True,
                     "from": uid
-                })
+                }, receiver)
 
-            elif "call_accept" in data and receiver in connections:
-                await connections[receiver].send_json({
+            elif "call_accept" in data:
+                await manager.send_personal_message({
                     "call_accept": True,
                     "from": uid
-                })
+                }, receiver)
 
-            elif "call_reject" in data and receiver in connections:
-                await connections[receiver].send_json({
+            elif "call_reject" in data:
+                await manager.send_personal_message({
                     "call_reject": True,
                     "from": uid
-                })
+                }, receiver)
 
             # 🎥 WEBRTC SIGNALING
             elif any(k in data for k in ["offer", "answer", "candidate"]):
-                if receiver in connections:
-                    await connections[receiver].send_json({
-                        **data,
-                        "from": uid
-                    })
+                await manager.send_personal_message({
+                    **data,
+                    "from": uid
+                }, receiver)
 
     except WebSocketDisconnect:
-        print(f"❌ {uid} disconnected")
+        manager.disconnect(uid)
 
-    finally:
-        connections.pop(uid, None)
-        online_users.discard(uid)
-
-        for conn in connections.values():
-            await conn.send_json({"online": list(online_users)})
+        # 🔥 broadcast updated online users
+        await manager.broadcast({"online": list(manager.online_users)})
