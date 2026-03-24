@@ -8,7 +8,6 @@ from app.core.firebase import verify_token
 router = APIRouter()
 
 
-# ✅ DB Dependency
 def get_db():
     db = SessionLocal()
     try:
@@ -23,13 +22,11 @@ def get_my_matches(
     db: Session = Depends(get_db)
 ):
     try:
-        # 🔐 Verify user
         token = authorization.split(" ")[1]
         decoded = verify_token(token)
 
         uid = decoded["uid"]
 
-        # 🔥 Get all matches
         matches = db.query(Match).filter(
             (Match.user1_uid == uid) | (Match.user2_uid == uid)
         ).all()
@@ -37,7 +34,6 @@ def get_my_matches(
         results = []
 
         for m in matches:
-            # 👉 Get other user
             other_uid = m.user2_uid if m.user1_uid == uid else m.user1_uid
 
             user = db.query(User).filter(
@@ -51,12 +47,13 @@ def get_my_matches(
                     "username": user.username,
                     "skills": user.skills,
 
-                    # 🔥 NEW FIELDS
+                    # 🔥 CORE HYBRID LOGIC
                     "chat_enabled": getattr(m, "chat_enabled", False),
+                    "invite_sender": getattr(m, "invite_sender", None),
 
-                    # 👉 optional (for UI logic)
-                    "can_chat": getattr(m, "chat_enabled", False),
-                    "invite_pending": not getattr(m, "chat_enabled", False),
+                    # 👉 useful flags
+                    "is_sender": getattr(m, "invite_sender", None) == uid,
+                    "can_accept": getattr(m, "invite_sender", None) not in [None, uid],
                 })
 
         return results

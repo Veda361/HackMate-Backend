@@ -1,11 +1,13 @@
-# app/api/invite.py
 from fastapi import APIRouter, Header, Depends, Body
 from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
 from app.models.match import Match
 from app.core.firebase import verify_token
 
+from app.api.chat import manager  # 🔥 for realtime
+
 router = APIRouter()
+
 
 def get_db():
     db = SessionLocal()
@@ -17,7 +19,7 @@ def get_db():
 
 # 🔥 SEND INVITE
 @router.post("/send")
-def send_invite(
+async def send_invite(
     data: dict = Body(...),
     authorization: str = Header(...),
     db: Session = Depends(get_db)
@@ -33,18 +35,23 @@ def send_invite(
     ).first()
 
     if not match:
-        return {"error": "No match found"}
+        return {"error": "No match"}
 
-    # store pending invite (simple version)
-    match.chat_enabled = False
+    match.invite_sender = uid
     db.commit()
+
+    # 🔥 REAL-TIME NOTIFICATION
+    await manager.send_personal_message({
+        "type": "invite",
+        "from": uid
+    }, other_uid)
 
     return {"msg": "Invite sent"}
 
 
 # 🔥 ACCEPT INVITE
 @router.post("/accept")
-def accept_invite(
+async def accept_invite(
     data: dict = Body(...),
     authorization: str = Header(...),
     db: Session = Depends(get_db)
@@ -64,5 +71,11 @@ def accept_invite(
 
     match.chat_enabled = True
     db.commit()
+
+    # 🔥 notify sender
+    await manager.send_personal_message({
+        "type": "invite_accepted",
+        "from": uid
+    }, other_uid)
 
     return {"msg": "Chat enabled"}

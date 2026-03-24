@@ -8,3 +8,4 @@ class Match(Base):
     user1_uid = Column(String)
     user2_uid = Column(String)
     chat_enabled = Column(Boolean, default=False)
+    invite_sender = Column(String, nullable=True)
