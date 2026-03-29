@@ -137,8 +137,10 @@ def get_suggestions(
         if not current_user:
             return []
 
-        if not current_user.skills:
-            return []
+        # ✅ allow even without skills 
+        users = db.query(User).filter(
+            User.firebase_uid != uid
+        ).all()
 
         users = db.query(User).filter(
             User.firebase_uid != uid,
@@ -149,7 +151,9 @@ def get_suggestions(
         results = []
 
         for u in users:
-            score = calculate_match(current_user.skills, u.skills)
+            score = 0
+            if current_user.skills and u.skills:
+                score = calculate_match(current_user.skills, u.skills)
 
             results.append({
                 "uid": u.firebase_uid,

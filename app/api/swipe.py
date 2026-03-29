@@ -42,6 +42,10 @@ async def swipe_user(
         print("Swiped:", swiped_uid)
         print("Liked:", liked)
 
+        # ❌ safety
+        if not swiped_uid:
+            return {"error": "Missing swiped_uid"}
+
         if swiper_uid == swiped_uid:
             return {"error": "Cannot swipe yourself"}
 
@@ -53,7 +57,7 @@ async def swipe_user(
 
         if existing:
             print("⚠️ Already swiped")
-            return {"msg": "Already swiped"}
+            return {"msg": "Already swiped", "match": False}
 
         # 🔥 CREATE SWIPE
         new_swipe = Swipe(
@@ -66,7 +70,9 @@ async def swipe_user(
 
         print("✅ Swipe saved")
 
+        # =========================
         # 🔥 CHECK MUTUAL LIKE
+        # =========================
         if liked:
             reverse = db.query(Swipe).filter(
                 Swipe.swiper_uid == swiped_uid,
@@ -92,7 +98,7 @@ async def swipe_user(
 
                     print("✅ Match created")
 
-                    # 🔥 REAL-TIME
+                    # 🔥 REAL-TIME (SAFE)
                     if manager:
                         try:
                             await manager.send_personal_message({
@@ -108,9 +114,18 @@ async def swipe_user(
                         except Exception as e:
                             print("⚠️ WS ERROR:", e)
 
-                return {"msg": "It's a MATCH 🎉"}
+                # ✅ IMPORTANT RESPONSE (FIXED)
+                return {
+                    "msg": "match",
+                    "match": True,
+                    "user": swiped_uid
+                }
 
-        return {"msg": "Swipe stored"}
+        # ✅ NORMAL SWIPE RESPONSE
+        return {
+            "msg": "Swipe stored",
+            "match": False
+        }
 
     except Exception as e:
         print("❌ SWIPE ERROR:", e)
