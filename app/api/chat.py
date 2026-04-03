@@ -73,19 +73,40 @@ async def websocket_endpoint(websocket: WebSocket, uid: str):
             if msg_type == "message":
                 db: Session = SessionLocal()
 
-                db.add(Message(
+                msg = Message(
                     sender_uid=uid,
                     receiver_uid=receiver,
                     content=data["message"]
-                ))
+                )
+                db.add(msg)
                 db.commit()
+                db.refresh(msg)
                 db.close()
 
-                # 🔥 SEND ONLY TO RECEIVER (FIXED)
+                # 🔥 SEND TO RECEIVER
                 await manager.send(receiver, {
                     "type": "message",
                     "from": uid,
-                    "message": data["message"]
+                    "message": data["message"],
+                    "id": msg.id
+                })
+
+            # =====================
+            # ✅ DELIVERED
+            # =====================
+            elif msg_type == "delivered":
+                await manager.send(receiver, {
+                    "type": "delivered",
+                    "message_id": data.get("message_id")
+                })
+
+            # =====================
+            # 👁 SEEN
+            # =====================
+            elif msg_type == "seen":
+                await manager.send(receiver, {
+                    "type": "seen",
+                    "message_id": data.get("message_id")
                 })
 
             # =====================
@@ -144,6 +165,7 @@ def get_chat_history(
 
         return [
             {
+                "id": m.id,
                 "from": m.sender_uid,
                 "message": m.content,
                 "time": m.timestamp
